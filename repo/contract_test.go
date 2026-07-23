@@ -25,9 +25,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/barryhennessy/bones/repo"
-	"github.com/barryhennessy/bones/repo/mongorepo"
-	"github.com/barryhennessy/bones/repo/pgxrepo"
+	"github.com/barry-hennessy/bones/repo"
+	"github.com/barry-hennessy/bones/repo/mongorepo"
+	"github.com/barry-hennessy/bones/repo/pgxrepo"
 )
 
 const (

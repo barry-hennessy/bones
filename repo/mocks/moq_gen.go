@@ -5,7 +5,7 @@ package mocks
 
 import (
 	"context"
-	"github.com/barryhennessy/bones/repo"
+	"github.com/barry-hennessy/bones/repo"
 	"sync"
 )
 

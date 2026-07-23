@@ -3,7 +3,7 @@ package bonestest
 import (
 	"testing"
 
-	"github.com/barryhennessy/bones"
+	"github.com/barry-hennessy/bones"
 
 	"github.com/stretchr/testify/assert"
 )

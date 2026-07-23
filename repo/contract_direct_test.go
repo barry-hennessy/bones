@@ -19,8 +19,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/barryhennessy/bones/repo"
-	"github.com/barryhennessy/bones/repo/opensearchrepo"
+	"github.com/barry-hennessy/bones/repo"
+	"github.com/barry-hennessy/bones/repo/opensearchrepo"
 )
 
 const openSearchImage = "opensearchproject/opensearch:3.3.1"

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/barryhennessy/bones/repo"
-	"github.com/barryhennessy/bones/repo/mocks"
+	"github.com/barry-hennessy/bones/repo"
+	"github.com/barry-hennessy/bones/repo/mocks"
 )
 
 func TestTransact_Success(t *testing.T) {

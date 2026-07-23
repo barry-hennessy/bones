@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/barryhennessy/bones"
+	"github.com/barry-hennessy/bones"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )

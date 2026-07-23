@@ -1,4 +1,4 @@
-module github.com/barryhennessy/bones
+module github.com/barry-hennessy/bones
 
 go 1.25.1
 

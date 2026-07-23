@@ -27,7 +27,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/barryhennessy/bones/repo"
+	"github.com/barry-hennessy/bones/repo"
 )
 
 // sessionTx adapts a mongo.Session to repo.Tx.

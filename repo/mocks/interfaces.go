@@ -3,7 +3,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/barryhennessy/bones/repo"
+	"github.com/barry-hennessy/bones/repo"
 )
 
 //go:generate go run github.com/matryer/moq@latest -stub -with-resets -out moq_gen.go . Tx TestFactory TestDirectFactory
