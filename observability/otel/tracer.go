@@ -26,15 +26,21 @@ type tracer struct {
 }
 
 func (t tracer) Start(ctx context.Context, name string, cfg observability.StartConfig) (context.Context, observability.Span) {
-	opts := make([]trace.SpanStartOption, 0, len(t.opts)+2)
-	opts = append(opts, t.opts...)
+	// Common case: nothing to add, so reuse the fixed options as-is rather
+	// than building a new slice per span.
+	opts := t.opts
 
-	if cfg.NewRoot {
-		opts = append(opts, trace.WithNewRoot())
-	}
+	if cfg.NewRoot || len(cfg.Links) > 0 {
+		opts = make([]trace.SpanStartOption, 0, len(t.opts)+2)
+		opts = append(opts, t.opts...)
 
-	if links := otelLinks(cfg.Links); len(links) > 0 {
-		opts = append(opts, trace.WithLinks(links...))
+		if cfg.NewRoot {
+			opts = append(opts, trace.WithNewRoot())
+		}
+
+		if links := otelLinks(cfg.Links); len(links) > 0 {
+			opts = append(opts, trace.WithLinks(links...))
+		}
 	}
 
 	ctx, s := t.inner.Start(ctx, name, opts...)

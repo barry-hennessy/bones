@@ -33,9 +33,9 @@ func TestNewStartsNamedRecordingSpan(t *testing.T) {
 	log := slog.New(slog.NewJSONHandler(&buf, nil))
 
 	tr := otelobs.New(tp.Tracer("test"))
-	lt := observability.LoggingTracer{Log: *log, Tracer: tr}.Name("orders")
+	lt := observability.LoggingTracer{Log: *log, Tracer: tr}.Component("orders")
 
-	ctx, spanLog, span := lt.Start(t.Context())
+	ctx, spanLog, span := lt.Start(t.Context(), "Create")
 	spanLog.Info("creating")
 	span.End()
 
@@ -49,7 +49,7 @@ func TestNewStartsNamedRecordingSpan(t *testing.T) {
 
 	spans := recorder.Ended()
 	require.Len(t, spans, 1)
-	assert.Equal(t, "orders", spans[0].Name())
+	assert.Equal(t, "Create", spans[0].Name())
 	assert.Contains(t, spans[0].Attributes(), attribute.String("component", "orders"))
 }
 
@@ -57,9 +57,9 @@ func TestNewAppliesStartOptions(t *testing.T) {
 	tp, recorder := testProvider(t)
 
 	tr := otelobs.New(tp.Tracer("test"), trace.WithSpanKind(trace.SpanKindServer))
-	lt := observability.LoggingTracer{Tracer: tr}.Name("orders")
+	lt := observability.LoggingTracer{Tracer: tr}.Component("orders")
 
-	_, _, span := lt.Start(t.Context())
+	_, _, span := lt.Start(t.Context(), "op")
 	span.End()
 
 	spans := recorder.Ended()
@@ -71,8 +71,8 @@ func TestStartParentsWithoutOptions(t *testing.T) {
 	tp, recorder := testProvider(t)
 	lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
-	parentCtx, _, parent := lt.Name("parent").Start(t.Context())
-	_, _, child := lt.Name("child").Start(parentCtx)
+	parentCtx, _, parent := lt.Component("parent").Start(t.Context(), "parent")
+	_, _, child := lt.Component("child").Start(parentCtx, "child")
 	child.End()
 	parent.End()
 
@@ -89,12 +89,12 @@ func TestWithNewRootIgnoresParent(t *testing.T) {
 	log := slog.New(slog.NewJSONHandler(&buf, nil))
 	lt := observability.LoggingTracer{Log: *log, Tracer: otelobs.New(tp.Tracer("test"))}
 
-	parentCtx, _, parent := lt.Name("parent").Start(t.Context())
+	parentCtx, _, parent := lt.Component("parent").Start(t.Context(), "parent")
 	parentTrace := parent.TraceID()
 	require.NotEmpty(t, parentTrace)
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	rootedCtx, spanLog, span := lt.Name("child").Start(ctx, observability.WithNewRoot())
+	rootedCtx, spanLog, span := lt.Component("child").Start(ctx, "child", observability.WithNewRoot())
 
 	assert.Equal(t, parentTrace, trace.SpanFromContext(parentCtx).SpanContext().TraceID().String(),
 		"Start must not mutate the input ctx")
@@ -128,8 +128,8 @@ func TestConstructorKindAppliesToNewRoot(t *testing.T) {
 	tr := otelobs.New(tp.Tracer("test"), trace.WithSpanKind(trace.SpanKindServer))
 	lt := observability.LoggingTracer{Tracer: tr}
 
-	parentCtx, _, parent := lt.Name("parent").Start(t.Context())
-	_, _, span := lt.Name("child").Start(parentCtx, observability.WithNewRoot())
+	parentCtx, _, parent := lt.Component("parent").Start(t.Context(), "parent")
+	_, _, span := lt.Component("child").Start(parentCtx, "child", observability.WithNewRoot())
 	span.End()
 	parent.End()
 
@@ -142,7 +142,7 @@ func TestWithLinkRecordsRemoteCause(t *testing.T) {
 	tp, recorder := testProvider(t)
 	lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
-	_, _, span := lt.Name("advance").Start(t.Context(),
+	_, _, span := lt.Component("advance").Start(t.Context(), "advance",
 		observability.WithNewRoot(),
 		observability.WithLink(observability.Link{
 			TraceID: causeTraceID,
@@ -175,7 +175,7 @@ func TestInvalidLinksAreSkipped(t *testing.T) {
 			lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
 			assert.NotPanics(t, func() {
-				_, _, span := lt.Name("advance").Start(t.Context(), observability.WithLink(link))
+				_, _, span := lt.Component("advance").Start(t.Context(), "advance", observability.WithLink(link))
 				span.End()
 			})
 
@@ -189,7 +189,7 @@ func TestAddLinkAfterStart(t *testing.T) {
 	tp, recorder := testProvider(t)
 	lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
-	_, _, span := lt.Name("advance").Start(t.Context())
+	_, _, span := lt.Component("advance").Start(t.Context(), "advance")
 	span.AddLink(observability.Link{TraceID: causeTraceID, SpanID: causeSpanID})
 	span.End()
 
@@ -203,7 +203,7 @@ func TestAddLinkAfterEndIsNoop(t *testing.T) {
 	tp, recorder := testProvider(t)
 	lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
-	_, _, span := lt.Name("advance").Start(t.Context())
+	_, _, span := lt.Component("advance").Start(t.Context(), "advance")
 	span.End()
 	span.AddLink(observability.Link{TraceID: causeTraceID, SpanID: causeSpanID})
 
@@ -215,7 +215,7 @@ func TestAddLinkInvalidIsSkipped(t *testing.T) {
 	tp, recorder := testProvider(t)
 	lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
-	_, _, span := lt.Name("advance").Start(t.Context())
+	_, _, span := lt.Component("advance").Start(t.Context(), "advance")
 	span.AddLink(observability.Link{TraceID: "nope", SpanID: "nope"})
 	span.End()
 
@@ -227,8 +227,8 @@ func TestWithLinkWithoutNewRootIsChildAndLink(t *testing.T) {
 	tp, recorder := testProvider(t)
 	lt := observability.LoggingTracer{Tracer: otelobs.New(tp.Tracer("test"))}
 
-	parentCtx, _, parent := lt.Name("parent").Start(t.Context())
-	_, _, child := lt.Name("child").Start(parentCtx, observability.WithLink(observability.Link{
+	parentCtx, _, parent := lt.Component("parent").Start(t.Context(), "parent")
+	_, _, child := lt.Component("child").Start(parentCtx, "child", observability.WithLink(observability.Link{
 		TraceID: causeTraceID,
 		SpanID:  causeSpanID,
 	}))
