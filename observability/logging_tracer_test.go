@@ -20,7 +20,7 @@ func TestLoggingTracer(t *testing.T) {
 			lt.Logger().Info("zero logger")
 		})
 
-		ctx, log, span := lt.Start(t.Context())
+		ctx, log, span := lt.Start(t.Context(), "op")
 		span.End()
 		assert.NotPanics(t, func() {
 			log.Info("zero start")
@@ -34,7 +34,7 @@ func TestLoggingTracer(t *testing.T) {
 
 	sweet.Run(t, "nil ctx is Background", zeroLT, func(t *testing.T, lt observability.LoggingTracer) {
 		assert.NotPanics(t, func() {
-			ctx, log, span := lt.Start(nil)
+			ctx, log, span := lt.Start(nil, "op")
 			defer span.End()
 			assert.Equal(t, context.Background(), ctx)
 			log.Info("nil ctx")
@@ -42,7 +42,7 @@ func TestLoggingTracer(t *testing.T) {
 	})
 
 	sweet.Run(t, "nil ctx passed to tracer", recordingLT, func(t *testing.T, d recDeps) {
-		_, _, span := d.lt.Start(nil)
+		_, _, span := d.lt.Start(nil, "op")
 		span.End()
 
 		starts := d.tracer.StartCalls()
@@ -53,15 +53,14 @@ func TestLoggingTracer(t *testing.T) {
 	sweet.Run(t, "zero Log uses slog.Default", restoreDefault, func(t *testing.T, d jsonDeps) {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(d.buf, nil)))
 
-		d.lt.Name("orders").Logger().Info("from default")
+		d.lt.Logger().Info("from default")
 
 		got := logLine(t, d.buf.Bytes())
 		assert.Equal(t, "from default", got["msg"])
-		assert.Equal(t, "orders", got["component"])
 	})
 
 	sweet.Run(t, "reads slog.Default on each call", restoreDefault, func(t *testing.T, d jsonDeps) {
-		lt := d.lt.Name("orders")
+		lt := d.lt
 
 		slog.SetDefault(slog.New(slog.NewJSONHandler(d.buf, nil)))
 
@@ -69,35 +68,16 @@ func TestLoggingTracer(t *testing.T) {
 
 		got := logLine(t, d.buf.Bytes())
 		assert.Equal(t, "after setdefault", got["msg"])
-		assert.Equal(t, "orders", got["component"])
-	})
-
-	sweet.Run(t, "Name overwrites", jsonLT, func(t *testing.T, d jsonDeps) {
-		d.lt.Name("orders").Name("orders.Create").Logger().Info("named")
-
-		got := logLine(t, d.buf.Bytes())
-		assert.Equal(t, "orders.Create", got["component"])
-
-		// @TODO: Why do we test this here?
-		assert.NotContains(t, got, "trace_id")
-	})
-
-	sweet.Run(t, "empty Name ignored", jsonLT, func(t *testing.T, d jsonDeps) {
-		d.lt.Name("orders").Name("").Logger().Info("kept")
-
-		got := logLine(t, d.buf.Bytes())
-		assert.Equal(t, "orders", got["component"])
 	})
 
 	sweet.Run(t, "nil tracer skips tracing", jsonLT, func(t *testing.T, d jsonDeps) {
-		lt := d.lt.Name("orders")
-		ctx, spanLog, span := lt.Start(t.Context())
+		lt := d.lt
+		ctx, spanLog, span := lt.Start(t.Context(), "op")
 		defer span.End()
 
 		spanLog.Info("no tracer")
 
 		got := logLine(t, d.buf.Bytes())
-		assert.Equal(t, "orders", got["component"])
 		assert.NotContains(t, got, "trace_id")
 		assert.NotContains(t, got, "span_id")
 		assert.Equal(t, t.Context(), ctx)
@@ -113,8 +93,8 @@ func TestLoggingTracer(t *testing.T) {
 		})
 	})
 
-	sweet.Run(t, "nil tracer WithNewRoot does not panic", jsonLT, func(t *testing.T, d jsonDeps) {
-		ctx, _, span := d.lt.Start(t.Context(), observability.WithNewRoot())
+	sweet.Run(t, "nil tracer StartWith NewRoot does not panic", jsonLT, func(t *testing.T, d jsonDeps) {
+		ctx, _, span := d.lt.StartWith(t.Context(), "op", observability.StartConfig{NewRoot: true})
 		defer span.End()
 
 		assert.Equal(t, t.Context(), ctx)
@@ -123,13 +103,12 @@ func TestLoggingTracer(t *testing.T) {
 	})
 
 	sweet.Run(t, "Start tags logger and span", recordingLT, func(t *testing.T, d recDeps) {
-		_, spanLog, span := d.lt.Name("orders").Start(t.Context())
+		_, spanLog, span := d.lt.Start(t.Context(), "orders")
 		spanLog.Info("creating")
 		span.End()
 
 		got := logLine(t, d.buf.Bytes())
 		assert.Equal(t, "creating", got["msg"])
-		assert.Equal(t, "orders", got["component"])
 		assert.Equal(t, "trace-1", got["trace_id"])
 		assert.Equal(t, "span-1", got["span_id"])
 
@@ -138,44 +117,35 @@ func TestLoggingTracer(t *testing.T) {
 		assert.Equal(t, "orders", starts[0].Name)
 		assert.Equal(t, observability.StartConfig{}, starts[0].Cfg)
 
-		attrs := d.span.SetAttributeCalls()
-		require.Len(t, attrs, 1)
-		assert.Equal(t, "component", attrs[0].Key)
-		assert.Equal(t, "orders", attrs[0].Value)
-
+		assert.Empty(t, d.span.SetAttributeCalls())
 		require.Len(t, d.span.EndCalls(), 1)
 	})
 
 	sweet.Run(t, "Start returns the tracer ctx", recordingLT, func(t *testing.T, d recDeps) {
-		ctx, _, span := d.lt.Name("orders").Start(t.Context())
+		ctx, _, span := d.lt.Start(t.Context(), "orders")
 		span.End()
 
 		assert.Equal(t, t.Context(), ctx)
 	})
 
-	sweet.Run(t, "Name is the span name", recordingLT, func(t *testing.T, d recDeps) {
-		_, _, span := d.lt.Name("http.POST /orders").Start(t.Context())
+	sweet.Run(t, "name is the span name", recordingLT, func(t *testing.T, d recDeps) {
+		_, _, span := d.lt.Start(t.Context(), "http.POST /orders")
 		span.End()
 
 		starts := d.tracer.StartCalls()
 		require.Len(t, starts, 1)
 		assert.Equal(t, "http.POST /orders", starts[0].Name)
-
-		attrs := d.span.SetAttributeCalls()
-		require.Len(t, attrs, 1)
-		assert.Equal(t, "http.POST /orders", attrs[0].Value)
 	})
 
 	sweet.Run(t, "invalid span omits ids", recordingLT, func(t *testing.T, d recDeps) {
 		d.span.IsValidFunc = func() bool { return false }
 		d.span.IsRecordingFunc = func() bool { return false }
 
-		_, spanLog, span := d.lt.Name("orders").Start(t.Context())
+		_, spanLog, span := d.lt.Start(t.Context(), "orders")
 		defer span.End()
 		spanLog.Info("invalid")
 
 		got := logLine(t, d.buf.Bytes())
-		assert.Equal(t, "orders", got["component"])
 		assert.NotContains(t, got, "trace_id")
 		assert.NotContains(t, got, "span_id")
 		assert.Empty(t, d.span.SetAttributeCalls())
@@ -184,30 +154,19 @@ func TestLoggingTracer(t *testing.T) {
 	sweet.Run(t, "valid non-recording span still tags ids", recordingLT, func(t *testing.T, d recDeps) {
 		d.span.IsRecordingFunc = func() bool { return false }
 
-		_, spanLog, span := d.lt.Name("orders").Start(t.Context())
+		_, spanLog, span := d.lt.Start(t.Context(), "orders")
 		defer span.End()
 		spanLog.Info("unsampled")
 
 		got := logLine(t, d.buf.Bytes())
-		assert.Equal(t, "orders", got["component"])
 		assert.Equal(t, "trace-1", got["trace_id"])
 		assert.Equal(t, "span-1", got["span_id"])
 		assert.Empty(t, d.span.SetAttributeCalls())
 	})
 
-	sweet.Run(t, "unnamed Start skips component attribute", recordingLT, func(t *testing.T, d recDeps) {
-		_, _, span := d.lt.Start(t.Context())
-		span.End()
-
-		starts := d.tracer.StartCalls()
-		require.Len(t, starts, 1)
-		assert.Equal(t, "", starts[0].Name)
-		assert.Empty(t, d.span.SetAttributeCalls())
-	})
-
 	sweet.Run(t, "nil span is safe", nilSpanLT, func(t *testing.T, d jsonDeps) {
 		assert.NotPanics(t, func() {
-			_, spanLog, span := d.lt.Name("orders").Start(t.Context())
+			_, spanLog, span := d.lt.Start(t.Context(), "orders")
 			defer span.End()
 			require.NotNil(t, span)
 			assert.False(t, span.IsValid())
@@ -218,12 +177,11 @@ func TestLoggingTracer(t *testing.T) {
 		})
 
 		got := logLine(t, d.buf.Bytes())
-		assert.Equal(t, "orders", got["component"])
 		assert.NotContains(t, got, "trace_id")
 	})
 
-	sweet.Run(t, "WithNewRoot folds into StartConfig", recordingLT, func(t *testing.T, d recDeps) {
-		_, _, span := d.lt.Start(t.Context(), observability.WithNewRoot())
+	sweet.Run(t, "StartWith passes NewRoot", recordingLT, func(t *testing.T, d recDeps) {
+		_, _, span := d.lt.StartWith(t.Context(), "op", observability.StartConfig{NewRoot: true})
 		span.End()
 
 		starts := d.tracer.StartCalls()
@@ -232,9 +190,9 @@ func TestLoggingTracer(t *testing.T) {
 		assert.Empty(t, starts[0].Cfg.Links)
 	})
 
-	sweet.Run(t, "WithLink does not imply new-root", recordingLT, func(t *testing.T, d recDeps) {
+	sweet.Run(t, "links do not imply new-root", recordingLT, func(t *testing.T, d recDeps) {
 		cause := observability.Link{TraceID: "t", SpanID: "s"}
-		_, _, span := d.lt.Start(t.Context(), observability.WithLink(cause))
+		_, _, span := d.lt.StartWith(t.Context(), "op", observability.StartConfig{Links: []observability.Link{cause}})
 		span.End()
 
 		starts := d.tracer.StartCalls()
@@ -243,14 +201,13 @@ func TestLoggingTracer(t *testing.T) {
 		assert.Equal(t, []observability.Link{cause}, starts[0].Cfg.Links)
 	})
 
-	sweet.Run(t, "WithNewRoot and WithLink compose", recordingLT, func(t *testing.T, d recDeps) {
+	sweet.Run(t, "NewRoot and links compose", recordingLT, func(t *testing.T, d recDeps) {
 		a := observability.Link{TraceID: "a", SpanID: "1"}
 		b := observability.Link{TraceID: "b", SpanID: "2"}
-		_, _, span := d.lt.Start(t.Context(),
-			observability.WithNewRoot(),
-			observability.WithLink(a),
-			observability.WithLink(b),
-		)
+		_, _, span := d.lt.StartWith(t.Context(), "op", observability.StartConfig{
+			NewRoot: true,
+			Links:   []observability.Link{a, b},
+		})
 		span.End()
 
 		starts := d.tracer.StartCalls()
@@ -261,11 +218,11 @@ func TestLoggingTracer(t *testing.T) {
 		}, starts[0].Cfg)
 	})
 
-	sweet.Run(t, "WithNewRoot logger uses returned span ids", recordingLT, func(t *testing.T, d recDeps) {
+	sweet.Run(t, "NewRoot logger uses returned span ids", recordingLT, func(t *testing.T, d recDeps) {
 		d.span.TraceIDFunc = func() string { return "new-trace" }
 		d.span.SpanIDFunc = func() string { return "new-span" }
 
-		_, spanLog, span := d.lt.Name("orders").Start(t.Context(), observability.WithNewRoot())
+		_, spanLog, span := d.lt.StartWith(t.Context(), "orders", observability.StartConfig{NewRoot: true})
 		defer span.End()
 		spanLog.Info("rooted")
 
@@ -275,7 +232,7 @@ func TestLoggingTracer(t *testing.T) {
 	})
 
 	sweet.Run(t, "Start returns the tracer span", recordingLT, func(t *testing.T, d recDeps) {
-		_, _, span := d.lt.Start(t.Context())
+		_, _, span := d.lt.Start(t.Context(), "op")
 		cause := observability.Link{TraceID: "t", SpanID: "s"}
 		span.AddLink(cause)
 		span.End()
