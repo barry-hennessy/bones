@@ -34,32 +34,17 @@ type Link struct {
 	SpanID  string
 }
 
-// StartConfig is the implementer view of a Start call. LoggingTracer
-// folds Start options into this struct. Domain and workflow code should
-// not construct it; they call WithNewRoot and WithLink.
+// StartConfig configures a single span start. Pass it to
+// [LoggingTracer.StartWith]; [LoggingTracer.Start] uses the zero value.
+// It is also what a Tracer receives.
 type StartConfig struct {
+	// NewRoot starts a new trace, ignoring any parent span identity on ctx
+	// while keeping the rest of ctx (including cancellation).
 	NewRoot bool
-	Links   []Link
-}
 
-// StartOption configures a single LoggingTracer.Start call.
-type StartOption func(*StartConfig)
-
-// WithNewRoot starts a new trace, ignoring any parent span identity on
-// ctx while keeping the rest of ctx (including cancellation).
-func WithNewRoot() StartOption {
-	return func(cfg *StartConfig) {
-		cfg.NewRoot = true
-	}
-}
-
-// WithLink attaches a link to a stored span. It may be repeated. It does
-// not imply new-root; pass WithNewRoot as well when the span should be
-// a new trace that still cites a cause.
-func WithLink(l Link) StartOption {
-	return func(cfg *StartConfig) {
-		cfg.Links = append(cfg.Links, l)
-	}
+	// Links cite stored spans as causes. Links do not imply NewRoot; set
+	// both when the span should be a new trace that still cites a cause.
+	Links []Link
 }
 
 // noopSpan is returned when there is no tracer or the tracer returned nil.
